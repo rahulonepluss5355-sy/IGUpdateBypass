@@ -3,6 +3,8 @@ package com.igbypass.module;
 import android.app.Activity;
 import android.app.Dialog;
 import android.os.Bundle;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
@@ -32,6 +34,17 @@ public class MainHook implements IXposedHookLoadPackage {
                     if (containsKeyword(name)) {
                         XposedBridge.log("IGBypass: Killing update activity: " + name);
                         activity.finish();
+                        return;
+                    }
+                    // Scan view hierarchy for obfuscated update screens
+                    try {
+                        View decorView = activity.getWindow().getDecorView();
+                        if (scanViewsForKeyword(decorView)) {
+                            XposedBridge.log("IGBypass: Killing update screen via view scan (onCreate)");
+                            activity.finish();
+                        }
+                    } catch (Throwable t) {
+                        // ignore
                     }
                 }
             });
@@ -45,6 +58,17 @@ public class MainHook implements IXposedHookLoadPackage {
                     if (containsKeyword(name)) {
                         XposedBridge.log("IGBypass: Killing update activity onResume: " + name);
                         activity.finish();
+                        return;
+                    }
+                    // Scan view hierarchy for obfuscated update screens
+                    try {
+                        View decorView = activity.getWindow().getDecorView();
+                        if (scanViewsForKeyword(decorView)) {
+                            XposedBridge.log("IGBypass: Killing update screen via view scan (onResume)");
+                            activity.finish();
+                        }
+                    } catch (Throwable t) {
+                        // ignore
                     }
                 }
             });
@@ -79,6 +103,22 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                 }
             });
+    }
+
+    private boolean scanViewsForKeyword(View root) {
+        if (root instanceof TextView) {
+            CharSequence text = ((TextView) root).getText();
+            if (text != null && containsKeyword(text.toString().toLowerCase())) {
+                return true;
+            }
+        }
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (scanViewsForKeyword(group.getChildAt(i))) return true;
+            }
+        }
+        return false;
     }
 
     private boolean containsKeyword(String text) {
