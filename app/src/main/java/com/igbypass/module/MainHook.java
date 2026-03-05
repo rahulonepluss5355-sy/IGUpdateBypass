@@ -126,6 +126,31 @@ public class MainHook implements IXposedHookLoadPackage {
     private Activity getActivity(Context ctx) {
         if (ctx instanceof Activity) return (Activity) ctx;
         if (ctx instanceof ContextWrapper) return getActivity(((ContextWrapper) ctx).getBaseContext());
+        // Fallback for React Native ThemedReactContext which doesn't wrap Activity normally
+        return getCurrentActivityViaThread();
+    }
+
+    private Activity getCurrentActivityViaThread() {
+        try {
+            Class<?> atClass = Class.forName("android.app.ActivityThread");
+            Object at = atClass.getMethod("currentActivityThread").invoke(null);
+            java.lang.reflect.Field f = atClass.getDeclaredField("mActivities");
+            f.setAccessible(true);
+            android.util.ArrayMap<?, ?> activities = (android.util.ArrayMap<?, ?>) f.get(at);
+            if (activities == null) return null;
+            for (Object val : activities.values()) {
+                Class<?> recordClass = val.getClass();
+                java.lang.reflect.Field pausedField = recordClass.getDeclaredField("paused");
+                pausedField.setAccessible(true);
+                if (!pausedField.getBoolean(val)) {
+                    java.lang.reflect.Field activityField = recordClass.getDeclaredField("activity");
+                    activityField.setAccessible(true);
+                    return (Activity) activityField.get(val);
+                }
+            }
+        } catch (Throwable t) {
+            XposedBridge.log("IGBypass: getCurrentActivity failed: " + t.getMessage());
+        }
         return null;
     }
 
