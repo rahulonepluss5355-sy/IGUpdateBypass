@@ -6,6 +6,15 @@ android {
     compileSdk 34
     namespace "com.igbypass.module"
 
+    signingConfigs {
+        release {
+            storeFile file("igbypass.keystore")
+            storePassword "igbypass123"
+            keyAlias "igbypass"
+            keyPassword "igbypass123"
+        }
+    }
+
     defaultConfig {
         applicationId "com.igbypass.module"
         minSdk 26
@@ -15,8 +24,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.release
+        }
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
         }
     }
 
