@@ -13,7 +13,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class MainHook implements IXposedHookLoadPackage {
 
-    private static final String TARGET_PACKAGE = "com.instagram.android";
+    private static final String TARGET_PACKAGE = "com.myinsta.android";
     private static final String TAG = "IGUpdateBypass";
 
     @Override
