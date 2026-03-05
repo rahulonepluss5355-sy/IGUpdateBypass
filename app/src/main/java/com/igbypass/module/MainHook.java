@@ -5,6 +5,7 @@ import android.os.Bundle;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XC_MethodReplacement;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
@@ -13,6 +14,17 @@ public class MainHook implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+        if (lpparam.packageName.equals("com.igbypass.module")) {
+            XposedHelpers.findAndHookMethod("com.igbypass.module.MainActivity",
+                lpparam.classLoader, "isModuleActive", new XC_MethodReplacement() {
+                    @Override
+                    protected Object replaceHookedMethod(MethodHookParam param) {
+                        return true;
+                    }
+                });
+            return;
+        }
+
         if (!lpparam.packageName.equals("com.myinsta.android")) return;
         XposedBridge.log("IGBypass: Loaded into MyInsta");
 
