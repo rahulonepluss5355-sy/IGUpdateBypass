@@ -10,9 +10,19 @@ import android.util.TypedValue;
 
 public class MainActivity extends Activity {
 
+    /**
+     * This method always returns false normally.
+     * When the Xposed module is active, it gets hooked to return true.
+     */
+    public static boolean isXposedActive() {
+        return false;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        boolean active = isXposedActive();
 
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -25,20 +35,26 @@ public class MainActivity extends Activity {
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
+        title.setPadding(32, 0, 32, 24);
 
         TextView status = new TextView(this);
-        status.setText("Module is NOT active.\nPlease enable it in LSPosed/EdXposed.");
-        status.setTextColor(Color.parseColor("#FF5252"));
+        if (active) {
+            status.setText("Module is ACTIVE");
+            status.setTextColor(Color.parseColor("#4CAF50"));
+        } else {
+            status.setText("Module is NOT active.\nPlease enable it in LSPosed/EdXposed.");
+            status.setTextColor(Color.parseColor("#FF5252"));
+        }
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         status.setGravity(Gravity.CENTER);
-        status.setPadding(32, 16, 32, 16);
+        status.setPadding(32, 0, 32, 16);
 
         TextView hint = new TextView(this);
-        hint.setText("If this text is red, Xposed is not running.\nIf module is active, you will never see this screen.");
+        hint.setText("After enabling, reboot or force-stop MyInsta.");
         hint.setTextColor(Color.parseColor("#888888"));
         hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         hint.setGravity(Gravity.CENTER);
-        hint.setPadding(32, 8, 32, 8);
+        hint.setPadding(32, 0, 32, 0);
 
         layout.addView(title);
         layout.addView(status);

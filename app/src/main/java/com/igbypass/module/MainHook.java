@@ -21,6 +21,18 @@ public class MainHook implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+        // Hook our own MainActivity to confirm module is active
+        if (lpparam.packageName.equals("com.igbypass.module")) {
+            XposedHelpers.findAndHookMethod("com.igbypass.module.MainActivity",
+                lpparam.classLoader, "isXposedActive", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        param.setResult(true);
+                    }
+                });
+            return;
+        }
+
         if (!lpparam.packageName.equals("com.myinsta.android")) return;
         XposedBridge.log("IGBypass: Loaded into MyInsta");
 
