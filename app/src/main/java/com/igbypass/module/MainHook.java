@@ -2,6 +2,8 @@ package com.igbypass.module;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
+import android.content.ContextWrapper;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,7 +24,6 @@ public class MainHook implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        // Hook our own MainActivity to confirm module is active
         if (lpparam.packageName.equals("com.igbypass.module")) {
             XposedHelpers.findAndHookMethod("com.igbypass.module.MainActivity",
                 lpparam.classLoader, "isXposedActive", new XC_MethodHook() {
@@ -37,7 +38,33 @@ public class MainHook implements IXposedHookLoadPackage {
         if (!lpparam.packageName.equals("com.myinsta.android")) return;
         XposedBridge.log("IGBypass: Loaded into MyInsta");
 
-        // Hook Activity lifecycle
+        // PRIMARY: Hook TextView.setText - catches update text the moment it is set,
+        // regardless of whether it's in an Activity, Fragment, or bottom sheet.
+        XposedHelpers.findAndHookMethod(TextView.class, "setText",
+            CharSequence.class, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    CharSequence text = (CharSequence) param.args[0];
+                    if (text == null || text.length() < 5 || text.length() > 200) return;
+                    final String lower = text.toString().toLowerCase();
+                    if (!containsKeyword(lower)) return;
+
+                    final TextView tv = (TextView) param.thisObject;
+                    // Post so we don't interfere with the setText call itself
+                    tv.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            Activity activity = getActivity(tv.getContext());
+                            if (activity != null && !activity.isFinishing()) {
+                                XposedBridge.log("IGBypass: Killing via setText hook: " + lower);
+                                activity.finish();
+                            }
+                        }
+                    });
+                }
+            });
+
+        // FALLBACK: Activity lifecycle hooks
         XposedHelpers.findAndHookMethod(Activity.class, "onCreate",
             Bundle.class, new XC_MethodHook() {
                 @Override
@@ -51,9 +78,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     final Activity activity = (Activity) param.thisObject;
-                    // Immediate scan
                     if (checkActivity(activity, "onResume")) return;
-                    // Delayed scan - text may be set asynchronously after onResume
                     activity.getWindow().getDecorView().postDelayed(new Runnable() {
                         @Override
                         public void run() {
@@ -63,35 +88,32 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
             });
 
-        // onWindowFocusChanged fires after window is fully drawn
         XposedHelpers.findAndHookMethod(Activity.class, "onWindowFocusChanged",
             boolean.class, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                    boolean hasFocus = (boolean) param.args[0];
-                    if (!hasFocus) return;
+                    if (!(boolean) param.args[0]) return;
                     checkActivity((Activity) param.thisObject, "onWindowFocusChanged");
                 }
             });
 
-        // Hook Dialog.show() - catches AlertDialog and custom dialogs
+        // Dialog hook
         XposedHelpers.findAndHookMethod(Dialog.class, "show",
             new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     Dialog dialog = (Dialog) param.thisObject;
                     try {
-                        TextView messageView = dialog.findViewById(android.R.id.message);
-                        if (messageView != null) {
-                            String text = messageView.getText().toString().toLowerCase();
+                        TextView msg = dialog.findViewById(android.R.id.message);
+                        if (msg != null) {
+                            String text = msg.getText().toString().toLowerCase();
                             if (containsKeyword(text)) {
-                                XposedBridge.log("IGBypass: Dismissing update dialog (text): " + text);
+                                XposedBridge.log("IGBypass: Dismissing update dialog: " + text);
                                 dialog.dismiss();
                                 return;
                             }
                         }
                     } catch (Throwable t) { /* ignore */ }
-
                     String name = dialog.getClass().getName().toLowerCase();
                     if (containsKeyword(name)) {
                         XposedBridge.log("IGBypass: Dismissing update dialog (name): " + name);
@@ -99,6 +121,12 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                 }
             });
+    }
+
+    private Activity getActivity(Context ctx) {
+        if (ctx instanceof Activity) return (Activity) ctx;
+        if (ctx instanceof ContextWrapper) return getActivity(((ContextWrapper) ctx).getBaseContext());
+        return null;
     }
 
     private boolean checkActivity(Activity activity, String trigger) {
@@ -123,9 +151,7 @@ public class MainHook implements IXposedHookLoadPackage {
     private boolean scanViewsForKeyword(View root) {
         if (root instanceof TextView) {
             CharSequence text = ((TextView) root).getText();
-            if (text != null && containsKeyword(text.toString().toLowerCase())) {
-                return true;
-            }
+            if (text != null && containsKeyword(text.toString().toLowerCase())) return true;
         }
         if (root instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) root;
