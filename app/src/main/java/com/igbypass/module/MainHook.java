@@ -16,7 +16,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class MainHook implements IXposedHookLoadPackage {
 
     private static final String[] KEYWORDS = {
-        "upgrade", "update", "force", "nag", "latest version", "boost", "new version"
+        "upgrade", "force update", "nag", "latest version", "new version",
+        "update your instagram", "update your app", "update the app"
     };
 
     @Override
