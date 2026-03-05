@@ -36,28 +36,12 @@ public class MainHook implements IXposedHookLoadPackage {
         if (!lpparam.packageName.equals("com.myinsta.android")) return;
         XposedBridge.log("IGBypass: Loaded into MyInsta");
 
-        // Hook Activity lifecycle - use full class name for obfuscated classes
+        // Hook Activity lifecycle
         XposedHelpers.findAndHookMethod(Activity.class, "onCreate",
             Bundle.class, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                    Activity activity = (Activity) param.thisObject;
-                    String name = activity.getClass().getName().toLowerCase();
-                    if (containsKeyword(name)) {
-                        XposedBridge.log("IGBypass: Killing update activity: " + name);
-                        activity.finish();
-                        return;
-                    }
-                    // Scan view hierarchy for obfuscated update screens
-                    try {
-                        View decorView = activity.getWindow().getDecorView();
-                        if (scanViewsForKeyword(decorView)) {
-                            XposedBridge.log("IGBypass: Killing update screen via view scan (onCreate)");
-                            activity.finish();
-                        }
-                    } catch (Throwable t) {
-                        // ignore
-                    }
+                    checkActivity((Activity) param.thisObject, "onCreate");
                 }
             });
 
@@ -65,23 +49,27 @@ public class MainHook implements IXposedHookLoadPackage {
             new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                    Activity activity = (Activity) param.thisObject;
-                    String name = activity.getClass().getName().toLowerCase();
-                    if (containsKeyword(name)) {
-                        XposedBridge.log("IGBypass: Killing update activity onResume: " + name);
-                        activity.finish();
-                        return;
-                    }
-                    // Scan view hierarchy for obfuscated update screens
-                    try {
-                        View decorView = activity.getWindow().getDecorView();
-                        if (scanViewsForKeyword(decorView)) {
-                            XposedBridge.log("IGBypass: Killing update screen via view scan (onResume)");
-                            activity.finish();
+                    final Activity activity = (Activity) param.thisObject;
+                    // Immediate scan
+                    if (checkActivity(activity, "onResume")) return;
+                    // Delayed scan - text may be set asynchronously after onResume
+                    activity.getWindow().getDecorView().postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            checkActivity(activity, "onResume+delay");
                         }
-                    } catch (Throwable t) {
-                        // ignore
-                    }
+                    }, 500);
+                }
+            });
+
+        // onWindowFocusChanged fires after window is fully drawn
+        XposedHelpers.findAndHookMethod(Activity.class, "onWindowFocusChanged",
+            boolean.class, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    boolean hasFocus = (boolean) param.args[0];
+                    if (!hasFocus) return;
+                    checkActivity((Activity) param.thisObject, "onWindowFocusChanged");
                 }
             });
 
@@ -91,8 +79,6 @@ public class MainHook implements IXposedHookLoadPackage {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     Dialog dialog = (Dialog) param.thisObject;
-
-                    // Check dialog message text content
                     try {
                         TextView messageView = dialog.findViewById(android.R.id.message);
                         if (messageView != null) {
@@ -103,11 +89,8 @@ public class MainHook implements IXposedHookLoadPackage {
                                 return;
                             }
                         }
-                    } catch (Throwable t) {
-                        // ignore - dialog may not have standard message view
-                    }
+                    } catch (Throwable t) { /* ignore */ }
 
-                    // Fallback: check class name
                     String name = dialog.getClass().getName().toLowerCase();
                     if (containsKeyword(name)) {
                         XposedBridge.log("IGBypass: Dismissing update dialog (name): " + name);
@@ -115,6 +98,25 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                 }
             });
+    }
+
+    private boolean checkActivity(Activity activity, String trigger) {
+        if (activity == null || activity.isFinishing()) return false;
+        String name = activity.getClass().getName().toLowerCase();
+        if (containsKeyword(name)) {
+            XposedBridge.log("IGBypass: Killing update activity [" + trigger + "]: " + name);
+            activity.finish();
+            return true;
+        }
+        try {
+            View decorView = activity.getWindow().getDecorView();
+            if (scanViewsForKeyword(decorView)) {
+                XposedBridge.log("IGBypass: Killing update screen via view scan [" + trigger + "]");
+                activity.finish();
+                return true;
+            }
+        } catch (Throwable t) { /* ignore */ }
+        return false;
     }
 
     private boolean scanViewsForKeyword(View root) {
